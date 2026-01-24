@@ -16,12 +16,17 @@ function pickUploadedFile(req) {
 
 function buildFileUrl(file) {
   if (!file) return "";
-  const host = (process.env.APP_ADDRESS || "").replace(/\/$/, "");
-  // if filename already a full url, return
-  if (String(file.filename).startsWith("http") || String(file.path).startsWith("http")) {
-    return file.filename || file.path;
+  
+  // Cloudinary uploads have a 'path' property with the full URL
+  if (file.path && file.path.startsWith("http")) {
+    return file.path;
   }
-  // prefer /uploads/<filename>
+  
+  // Fallback for local uploads (backward compatibility)
+  const host = (process.env.APP_ADDRESS || "").replace(/\/$/, "");
+  if (String(file.filename).startsWith("http")) {
+    return file.filename;
+  }
   return host ? `/uploads/${file.filename}` : `/uploads/${file.filename}`;
 }
 

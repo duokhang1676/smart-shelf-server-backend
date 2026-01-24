@@ -2,15 +2,9 @@ const mongoose = require("mongoose");
 const path = require("path");
 const fs = require("fs");
 const Combo = require("../model/Combo");
+const { buildFileUrl } = require("../utils/upload.helper");
 
 const isValidObjectId = (id) => mongoose.Types.ObjectId.isValid(id);
-
-function buildFileUrl(file) {
-  if (!file) return "";
-  const host = process.env.APP_ADDRESS?.replace(/\/$/, "") || "";
-  // Nếu bạn phục vụ static /public/uploads, có thể đổi thành `/uploads/${file.filename}`
-  return `uploads/${file.filename}`;
-}
 
 /** Lấy file upload từ cả 2 trường hợp:
  * - .single("product_image")  => req.file

@@ -1,17 +1,7 @@
 // middlewares/upload.js
 const multer = require("multer");
 const path = require("path");
-
-// Set storage engine
-const storage = multer.diskStorage({
-  destination: "./public/uploads/",
-  filename: function (req, file, cb) {
-    cb(
-      null,
-      file.fieldname + "-" + Date.now() + path.extname(file.originalname)
-    );
-  },
-});
+const { storage } = require("../config/cloudinary");
 
 // Check File Type
 function checkFileType(file, cb) {
@@ -29,10 +19,10 @@ function checkFileType(file, cb) {
   }
 }
 
-// Init Upload
+// Init Upload with Cloudinary storage
 const upload = multer({
-  storage,
-  limits: { fileSize: 100000000 },
+  storage, // Use Cloudinary storage from config
+  limits: { fileSize: 100000000 }, // 100MB limit
   fileFilter: (req, file, cb) => checkFileType(file, cb),
 }).fields([
   { name: "image", maxCount: 1 },

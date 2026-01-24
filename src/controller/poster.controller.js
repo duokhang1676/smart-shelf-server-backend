@@ -1,5 +1,6 @@
 const Poster = require("../model/Poster");
 const path = require("path");
+const { buildFileUrl } = require("../utils/upload.helper");
 
 // GET /api/posters
 exports.getAllPosters = async (req, res) => {
@@ -30,7 +31,7 @@ exports.createPoster = async (req, res) => {
     // multer.fields puts files in req.files as arrays keyed by fieldname
     if (req.files && req.files.image && req.files.image[0]) {
       const file = req.files.image[0];
-      image_url = `${req.protocol}://${req.get("host")}/uploads/${file.filename}`;
+      image_url = buildFileUrl(file); // Cloudinary URL
     } else if (req.body && req.body.image_url) {
       image_url = String(req.body.image_url).trim();
     }
@@ -51,7 +52,7 @@ exports.updatePoster = async (req, res) => {
 
     if (req.files && req.files.image && req.files.image[0]) {
       const file = req.files.image[0];
-      update.image_url = `${req.protocol}://${req.get("host")}/uploads/${file.filename}`;
+      update.image_url = buildFileUrl(file); // Cloudinary URL
     } else if (req.body && req.body.image_url !== undefined) {
       update.image_url = String(req.body.image_url).trim();
     }
