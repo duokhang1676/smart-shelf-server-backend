@@ -12,53 +12,62 @@ exports.handleSepayWebhook = async (req, res) => {
     const {
       id,                    // Transaction ID từ SePay
       gateway,              // Tên ngân hàng
-      transaction_date,     // Thời gian giao dịch
-      account_number,       // Số tài khoản nhận tiền
-      sub_account,         // Số phụ (nếu có)
-      amount_in,           // Số tiền nhận được
-      amount_out,          // Số tiền chuyển đi (thường là 0)
-      accumulated,         // Tổng tiền tích lũy
+      transactionDate,      // Thời gian giao dịch
+      accountNumber,        // Số tài khoản nhận tiền
+      subAccount,          // Số phụ (nếu có)
+      transferAmount,      // Số tiền chuyển khoản
       code,                // Mã giao dịch ngân hàng
-      transaction_content, // Nội dung chuyển khoản
-      reference_number,    // Số tham chiếu
-      body,                // Nội dung chi tiết
+      content,             // Nội dung chuyển khoản
+      referenceCode,       // Mã tham chiếu
+      description,         // Mô tả chi tiết
+      transferType,        // Loại giao dịch (in/out)
+      accumulated,         // Tổng tiền tích lũy
     } = req.body;
 
     // Validate required fields
-    if (!transaction_content || !amount_in) {
+    if (!content || !transferAmount) {
+      console.error('❌ Missing required fields: content or transferAmount');
       return res.status(400).json({
         success: false,
-        error: 'Missing required fields: transaction_content or amount_in'
+        error: 'Missing required fields: content or transferAmount'
       });
     }
 
-    // Extract order_id từ transaction_content
-    // Format: "SMART SHELF ORDER_123456" hoặc "ORDER_123456"
-    const orderIdMatch = transaction_content.match(/ORDER[_\s]?(\d+)/i);
+    // Extract order_id từ content
+    // Format: "Pay for snack machine OD1769552305" hoặc "ORDER_123456"
+    const orderIdMatch = content.match(/OD(\d+)/i) || content.match(/ORDER[_\s]?(\d+)/i);
     const orderId = orderIdMatch ? orderIdMatch[1] : null;
+
+    console.log(`🔍 Extracted Order ID: ${orderId || 'N/A'}`);
 
     // Prepare MQTT message payload
     const mqttPayload = {
       transaction_id: id,
       order_id: orderId,
-      amount: amount_in,
-      transaction_content,
+      amount: transferAmount,
+      transaction_content: content,
       bank: gateway,
-      transaction_date,
-      account_number,
-      code,
-      reference_number,
+      transaction_date: transactionDate,
+      account_number: accountNumber,
+      code: code || referenceCode,
+      reference_code: referenceCode,
+      transfer_type: transferType,
+      description,
       status: 'success',
       timestamp: new Date().toISOString(),
     };
 
     // Publish to MQTT topic: payment/notification
     const topic = 'payment/notification';
+    
+    console.log(`📤 Publishing to MQTT topic: ${topic}`);
+    console.log(`📦 Payload:`, JSON.stringify(mqttPayload, null, 2));
+    
     await publishMessage(topic, mqttPayload);
 
-    console.log(`✅ Payment notification published to MQTT topic: ${topic}`);
+    console.log(`✅ Payment notification published to MQTT successfully`);
     console.log(`   Order ID: ${orderId || 'N/A'}`);
-    console.log(`   Amount: ${amount_in} VND`);
+    console.log(`   Amount: ${transferAmount} VND`);
 
     // Response to SePay
     res.status(200).json({
@@ -66,13 +75,14 @@ exports.handleSepayWebhook = async (req, res) => {
       message: 'Webhook received and forwarded to MQTT',
       data: {
         order_id: orderId,
-        amount: amount_in,
+        amount: transferAmount,
         transaction_id: id,
       }
     });
 
   } catch (error) {
     console.error('❌ Error handling SePay webhook:', error);
+    console.error('Stack trace:', error.stack);
     
     // Vẫn trả về 200 để SePay không retry liên tục
     res.status(200).json({
