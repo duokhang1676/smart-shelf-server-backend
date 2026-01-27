@@ -35,8 +35,8 @@ exports.handleSepayWebhook = async (req, res) => {
 
     // Extract order_id từ content
     // Format: "Pay for snack machine OD1769552305" hoặc "ORDER_123456"
-    const orderIdMatch = content.match(/OD(\d+)/i) || content.match(/ORDER[_\s]?(\d+)/i);
-    const orderId = orderIdMatch ? orderIdMatch[1] : null;
+    const orderIdMatch = content.match(/OD\d+/i) || content.match(/ORDER[_\s]?\d+/i);
+    const orderId = orderIdMatch ? orderIdMatch[0] : null;
 
     console.log(`🔍 Extracted Order ID: ${orderId || 'N/A'}`);
 
