@@ -4,6 +4,7 @@ const cors = require('cors');
 const app = express();
 require('dotenv').config();
 const connectDB = require('./src/config/database')
+const { connectMQTT } = require('./src/config/mqtt');
 // Thêm các dòng sau:
 const http = require('http');
 const server = http.createServer(app);
@@ -68,6 +69,9 @@ app.use(express.static('public'));
 // Kết nối MongoDB
 console.log(process.env.MONGO_URI);
 connectDB()
+
+// Kết nối MQTT
+connectMQTT();
 
 // lưu raw body để debug (tùy chọn)
 app.use(express.json({
