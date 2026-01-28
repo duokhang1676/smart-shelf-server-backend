@@ -3,6 +3,7 @@ const Oder = require('../model/Oder');
 const OderDetail = require('../model/OderDetail');
 const fs = require("fs");
 const path = require("path");
+const { cloudinary } = require('../config/cloudinary');
 
 // Tạo mới Order cùng details (transaction)
 exports.createOrderWithDetails = async (req, res) => {
@@ -112,13 +113,8 @@ exports.createOrderWithDetails = async (req, res) => {
         // 5) Commit trước khi xử lý file (tránh lỗi file làm hỏng transaction)
         await session.commitTransaction();
 
-        // 6) Save ảnh (nếu có). Không ràng buộc transaction.
+        // 6) Save ảnh lên Cloudinary (nếu có). Không ràng buộc transaction.
         try {
-            const uploadDir = path.join(__dirname, "..", "..", "public", "uploads", "customers");
-            fs.mkdirSync(uploadDir, {
-                recursive: true
-            });
-
             // multer.single('receipt_image') => req.file
             // trước khi lưu ảnh:
             let file = req.file;
@@ -130,25 +126,45 @@ exports.createOrderWithDetails = async (req, res) => {
             }
 
             if (file) {
-                const originalName = file.originalname || file.name || "";
-                const ext = path.extname(originalName || "") || ".jpg";
-                const destName = `${order._id.toString()}-${Date.now()}${ext}`;
-                const destPath = path.join(uploadDir, destName);
-
-                if (file.path) {
-                    fs.renameSync(file.path, destPath);
-                } else if (file.buffer) {
-                    fs.writeFileSync(destPath, file.buffer);
+                // Upload lên Cloudinary
+                let uploadResult;
+                
+                if (file.buffer) {
+                    // Upload từ buffer (memory storage)
+                    uploadResult = await new Promise((resolve, reject) => {
+                        const uploadStream = cloudinary.uploader.upload_stream(
+                            {
+                                folder: 'smart-shelf/customers',
+                                public_id: `customer-${order._id.toString()}-${Date.now()}`,
+                                resource_type: 'auto'
+                            },
+                            (error, result) => {
+                                if (error) reject(error);
+                                else resolve(result);
+                            }
+                        );
+                        uploadStream.end(file.buffer);
+                    });
+                } else if (file.path) {
+                    // Upload từ file path
+                    uploadResult = await cloudinary.uploader.upload(file.path, {
+                        folder: 'smart-shelf/customers',
+                        public_id: `customer-${order._id.toString()}-${Date.now()}`,
+                        resource_type: 'auto'
+                    });
                 }
 
-                const publicPath = `/uploads/customers/${destName}`;
-                await Oder.findByIdAndUpdate(order._id, {
-                    $set: {
-                        customer_image: publicPath
-                    }
-                });
-                order.customer_image = publicPath;
+                if (uploadResult && uploadResult.secure_url) {
+                    // Lưu URL Cloudinary vào database
+                    await Oder.findByIdAndUpdate(order._id, {
+                        $set: {
+                            customer_image: uploadResult.secure_url
+                        }
+                    });
+                    order.customer_image = uploadResult.secure_url;
+                }
             } else if (req.body.customer_image) {
+                // Nếu gửi URL trực tiếp
                 const url = String(req.body.customer_image);
                 await Oder.findByIdAndUpdate(order._id, {
                     $set: {
@@ -158,7 +174,7 @@ exports.createOrderWithDetails = async (req, res) => {
                 order.customer_image = url;
             }
         } catch (fileErr) {
-            console.error("Customer image save error:", fileErr);
+            console.error("Customer image upload to Cloudinary error:", fileErr);
             // không fail response
         }
 
