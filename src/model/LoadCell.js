@@ -35,6 +35,10 @@ const LoadCellSchema = new mongoose.Schema({
     required: true,
     default: 1,
   }, // ngưỡng hết hàng
+  quantity: {
+    type: Number,
+    default: 0,
+  }, // số lượng sản phẩm hiện tại trên ngăn
   error: {
     type: Number,
     required: true,
