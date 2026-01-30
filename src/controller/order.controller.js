@@ -511,7 +511,8 @@ exports.getProductSalesStatistics = async (req, res) => {
             }
         }
 
-        const productStats = await OderDetail.aggregate([
+        // Build aggregation pipeline
+        const pipeline = [
             // Lookup để join với Order
             {
                 $lookup: {
@@ -547,9 +548,16 @@ exports.getProductSalesStatistics = async (req, res) => {
                     lastSaleDate: { $max: '$order.createdAt' }
                 }
             },
-            { $sort: { totalQuantitySold: -1 } },
-            { $limit: parseInt(limit) }
-        ]);
+            { $sort: { totalQuantitySold: -1 } }
+        ];
+
+        // Only add $limit if limit > 0
+        const limitInt = parseInt(limit);
+        if (limitInt > 0) {
+            pipeline.push({ $limit: limitInt });
+        }
+
+        const productStats = await OderDetail.aggregate(pipeline);
 
         // Thống kê tổng quan
         const overallStats = await OderDetail.aggregate([
@@ -590,11 +598,11 @@ exports.getProductSalesStatistics = async (req, res) => {
                     totalRevenue: summary.totalRevenue,
                     uniqueProductCount: summary.uniqueProducts.length,
                     uniqueOrderCount: summary.totalOrders.length,
-                    averageQuantityPerOrder: summary.uniqueOrderCount > 0 
-                        ? summary.totalProductsSold / summary.uniqueOrderCount : 0
+                    averageQuantityPerOrder: summary.totalOrders.length > 0 
+                        ? summary.totalProductsSold / summary.totalOrders.length : 0
                 },
                 period,
-                limit: parseInt(limit)
+                limit: limitInt
             }
         });
     } catch (err) {
