@@ -136,24 +136,12 @@ exports.updateShelfProductQuantity = async (req, res) => {
       });
     }
 
-    const oldQuantity = loadCell.quantity || 0;
-    const quantityDiff = quantity - oldQuantity;
-
     // Cập nhật quantity của LoadCell
     loadCell.quantity = quantity;
     await loadCell.save();
 
-    // Cập nhật stock của Product liên kết
-    if (loadCell.product_id) {
-      const product = await Product.findById(loadCell.product_id);
-      if (product) {
-        // Trừ số lượng lấy ra khỏi stock cũ
-        product.stock = (product.stock || 0) - quantityDiff;
-        // Đảm bảo stock không âm
-        if (product.stock < 0) product.stock = 0;
-        await product.save();
-      }
-    }
+    // KHÔNG CẦN cập nhật product.stock nữa vì stock giờ tự động tính từ tổng LoadCells
+    // Stock sẽ được tính lại khi gọi API getProducts
 
     // Gọi hàm tạo notification
     const io = req.app.get('io');

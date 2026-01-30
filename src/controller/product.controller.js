@@ -44,7 +44,8 @@ exports.createProduct = async (req, res) => {
 
     // prepare numeric conversions with safe defaults
     const parsedPrice = price !== undefined ? Number(price) : 0;
-    const parsedStock = stock !== undefined ? Number(stock) : 0;
+    // Stock sẽ tự động tính từ LoadCells, không cần nhập thủ công
+    const parsedStock = 0; // Luôn khởi tạo = 0, sẽ tự động tính khi có LoadCells
     const parsedDiscount = discount !== undefined ? Number(discount) : 0;
     const parsedWeight = weight !== undefined ? Number(weight) : 0;
     const parsedMaxQuantity = max_quantity !== undefined ? Number(max_quantity) : 0;
@@ -82,8 +83,31 @@ exports.createProduct = async (req, res) => {
 
 exports.getProducts = async (req, res) => {
   try {
-    const products = await Product.find();
-    res.json(products);
+    const LoadCell = require("../model/LoadCell");
+    
+    // Lấy tất cả sản phẩm
+    const products = await Product.find().lean();
+    
+    // Tính tổng số lượng từ LoadCells cho mỗi sản phẩm
+    const productsWithCalculatedStock = await Promise.all(
+      products.map(async (product) => {
+        const loadCellsAggregation = await LoadCell.aggregate([
+          { $match: { product_id: product._id } },
+          { $group: { _id: null, totalQuantity: { $sum: "$quantity" } } }
+        ]);
+        
+        const calculatedStock = loadCellsAggregation.length > 0 
+          ? loadCellsAggregation[0].totalQuantity 
+          : 0;
+        
+        return {
+          ...product,
+          stock: calculatedStock // Ghi đè stock bằng số lượng tính từ LoadCells
+        };
+      })
+    );
+    
+    res.json(productsWithCalculatedStock);
   } catch (err) {
     res.status(500).json({
       error: err.message,
@@ -114,7 +138,8 @@ exports.updateProduct = async (req, res) => {
 
     // convert numeric fields if present
     if (updateData.price !== undefined) updateData.price = Number(updateData.price);
-    if (updateData.stock !== undefined) updateData.stock = Number(updateData.stock);
+    // KHÔNG CHO PHÉP update stock - stock tự động tính từ LoadCells
+    delete updateData.stock; // Xóa stock khỏi updateData nếu có
     if (updateData.discount !== undefined) updateData.discount = Number(updateData.discount);
     if (updateData.weight !== undefined) updateData.weight = Number(updateData.weight);
     if (updateData.max_quantity !== undefined) updateData.max_quantity = Number(updateData.max_quantity);
@@ -131,7 +156,22 @@ exports.updateProduct = async (req, res) => {
       new: true,
     });
     if (!product) return res.status(404).json({ error: "Product not found" });
-    res.json(product);
+    
+    // Tính lại stock từ LoadCells
+    const LoadCell = require("../model/LoadCell");
+    const loadCellsAggregation = await LoadCell.aggregate([
+      { $match: { product_id: product._id } },
+      { $group: { _id: null, totalQuantity: { $sum: "$quantity" } } }
+    ]);
+    
+    const calculatedStock = loadCellsAggregation.length > 0 
+      ? loadCellsAggregation[0].totalQuantity 
+      : 0;
+    
+    const productWithCalculatedStock = product.toObject();
+    productWithCalculatedStock.stock = calculatedStock;
+    
+    res.json(productWithCalculatedStock);
   } catch (err) {
     res.status(400).json({ error: err.message });
   }
