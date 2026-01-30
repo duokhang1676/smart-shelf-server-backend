@@ -10,6 +10,11 @@ const NotificationSchema = new mongoose.Schema({
     enum: ["warning", "error", "info", "success"],
     default: "info",
   },
+  category: {
+    type: String,
+    enum: ["vibration", "restock", "low_stock", "order", "general"],
+    default: "general",
+  },
   timestamp: {
     type: Date,
     default: Date.now,

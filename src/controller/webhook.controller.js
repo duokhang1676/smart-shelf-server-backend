@@ -1,4 +1,5 @@
 const { publishMessage } = require('../config/mqtt');
+const Notification = require('../model/Notification');
 
 /**
  * Webhook endpoint nhận notification từ SePay khi có giao dịch chuyển khoản
@@ -68,6 +69,26 @@ exports.handleSepayWebhook = async (req, res) => {
     console.log(`✅ Payment notification published to MQTT successfully`);
     console.log(`   Order ID: ${orderId || 'N/A'}`);
     console.log(`   Amount: ${transferAmount} VND`);
+
+    // Tạo notification cho thanh toán thành công
+    try {
+      const notification = await Notification.create({
+        message: `Thanh toán thành công ${orderId || 'N/A'} - Số tiền: ${transferAmount.toLocaleString('vi-VN')}đ - Ngân hàng: ${gateway}`,
+        type: 'success',
+        category: 'order',
+      });
+
+      // Emit real-time notification qua Socket.IO nếu có
+      const io = req.app.get('io');
+      if (io) {
+        io.emit('new-notification', notification);
+      }
+      
+      console.log(`📢 Payment notification created in database`);
+    } catch (notifErr) {
+      console.error('Failed to create payment notification:', notifErr);
+      // Không fail response
+    }
 
     // Response to SePay
     res.status(200).json({

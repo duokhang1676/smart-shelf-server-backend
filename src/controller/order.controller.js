@@ -1,6 +1,7 @@
 // src/controller/oder.controller.js
 const Oder = require('../model/Oder');
 const OderDetail = require('../model/OderDetail');
+const Notification = require('../model/Notification');
 const fs = require("fs");
 const path = require("path");
 const { cloudinary } = require('../config/cloudinary');
@@ -178,7 +179,28 @@ exports.createOrderWithDetails = async (req, res) => {
             // không fail response
         }
 
-        // 7) Trả về (dùng toObject để loại metadata mongoose)
+        // 7.5) Tạo notification cho order mới
+        try {
+            const io = req.app.get('io');
+            const statusText = orderData.status === 'paid' ? 'đã thanh toán' : 
+                              orderData.status === 'pending' ? 'chờ thanh toán' : orderData.status;
+            
+            const notification = await Notification.create({
+                message: `Hóa đơn mới ${orderData.order_code} - Trạng thái: ${statusText} - Tổng tiền: ${orderData.total_bill.toLocaleString('vi-VN')}đ`,
+                type: orderData.status === 'paid' ? 'success' : 'info',
+                category: 'order',
+                shelf_id: orderData.shelf_id,
+            });
+
+            if (io) {
+                io.emit('new-notification', notification);
+            }
+        } catch (notifErr) {
+            console.error("Failed to create order notification:", notifErr);
+            // Không fail response
+        }
+
+        // 8) Trả về (dùng toObject để loại metadata mongoose)
         return res.status(201).json({
             order: order.toObject ? order.toObject() : order,
             orderDetails: details.map(d => (d.toObject ? d.toObject() : d)),

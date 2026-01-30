@@ -243,6 +243,7 @@ const createLowQuantityNotification = async (loadcell, io) => {
     const notification = await Notification.create({
       message,
       type: "warning",
+      category: "low_stock", // Thêm category cho thông báo sắp hết hàng
       load_cell_id: loadcell._id,
       shelf_id: loadcell.shelf_id,
       product_id: loadcell.product_id,
