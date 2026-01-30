@@ -199,9 +199,71 @@ exports.createOrderWithDetails = async (req, res) => {
 // Lấy danh sách Order (kèm OrderDetail)
 exports.getOrders = async (req, res) => {
     try {
-        const orders = await Oder.find().sort({
-            createdAt: -1
-        });
+        // Pagination params
+        const page = parseInt(req.query.page) || 1;
+        const limit = parseInt(req.query.limit) || 10;
+        const skip = (page - 1) * limit;
+
+        // Filter params (optional)
+        const status = req.query.status; // 'paid', 'unpaid', 'pending', 'cancelled'
+        const search = req.query.search; // search by order_code
+
+        // Build query
+        let query = {};
+        if (status) {
+            query.status = status.toLowerCase();
+        }
+        if (search) {
+            query.order_code = { $regex: search, $options: 'i' };
+        }
+
+        // Count total for pagination
+        const total = await Oder.countDocuments(query);
+
+        // Calculate aggregated statistics (across ALL records, not just current page)
+        const stats = await Oder.aggregate([
+            { $match: query }, // Apply same filters
+            {
+                $group: {
+                    _id: null,
+                    totalSales: {
+                        $sum: {
+                            $cond: [
+                                { $ne: ['$status', 'cancelled'] },
+                                '$total_bill',
+                                0
+                            ]
+                        }
+                    },
+                    paidCount: {
+                        $sum: { $cond: [{ $eq: ['$status', 'paid'] }, 1, 0] }
+                    },
+                    unpaidCount: {
+                        $sum: { $cond: [{ $eq: ['$status', 'unpaid'] }, 1, 0] }
+                    },
+                    pendingCount: {
+                        $sum: { $cond: [{ $eq: ['$status', 'pending'] }, 1, 0] }
+                    },
+                    cancelledCount: {
+                        $sum: { $cond: [{ $eq: ['$status', 'cancelled'] }, 1, 0] }
+                    }
+                }
+            }
+        ]);
+
+        const statistics = stats[0] || {
+            totalSales: 0,
+            paidCount: 0,
+            unpaidCount: 0,
+            pendingCount: 0,
+            cancelledCount: 0
+        };
+
+        // Fetch orders with pagination
+        const orders = await Oder.find(query)
+            .sort({ createdAt: -1 })
+            .skip(skip)
+            .limit(limit);
 
         const ordersWithDetails = await Promise.all(
             orders.map(async (order) => {
@@ -225,7 +287,21 @@ exports.getOrders = async (req, res) => {
 
         res.status(200).json({
             success: true,
-            data: ordersWithDetails
+            data: ordersWithDetails,
+            pagination: {
+                page,
+                limit,
+                total,
+                totalPages: Math.ceil(total / limit),
+                hasMore: page * limit < total
+            },
+            statistics: {
+                totalSales: statistics.totalSales,
+                paidCount: statistics.paidCount,
+                unpaidCount: statistics.unpaidCount,
+                pendingCount: statistics.pendingCount,
+                cancelledCount: statistics.cancelledCount
+            }
         });
     } catch (err) {
         res.status(500).json({
