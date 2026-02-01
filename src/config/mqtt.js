@@ -209,17 +209,24 @@ async function handlePaymentNotification(payload) {
 }
 
 async function handleProductAdded(payload) {
-  const { id: shelf_id, event, rfid, verified_quantity, date_time } = payload;
+  const { id: shelf_mac, event, rfid, verified_quantity, date_time } = payload;
+  
+  // Find shelf by MAC address to get ObjectId
+  const shelf = await Shelf.findOne({ id: shelf_mac });
+  if (!shelf) {
+    console.warn(`⚠️ Shelf not found for MAC: ${shelf_mac}`);
+    return;
+  }
   
   // Find user by RFID
   const user = await User.findOne({ rfid });
   const employeeName = user ? (user.fullName || user.username) : `RFID ${rfid}`;
   
   const notification = new Notification({
-    message: `Nhân viên ${employeeName} đã thêm sản phẩm vào kệ ${shelf_id}, số lượng: ${verified_quantity} vào lúc ${date_time}`,
+    message: `Nhân viên ${employeeName} đã thêm sản phẩm vào kệ ${shelf.name || shelf_mac}, số lượng: ${verified_quantity} vào lúc ${date_time}`,
     type: 'info',
     category: 'restock',
-    shelf_id,
+    shelf_id: shelf._id, // Use ObjectId instead of MAC address
   });
   await notification.save();
   if (ioInstance) ioInstance.emit('new-notification', notification);
