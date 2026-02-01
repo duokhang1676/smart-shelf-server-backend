@@ -210,7 +210,7 @@ const createLowQuantityNotification = async (loadcell, io) => {
       type: "warning",
       read: false,
       message: {
-        $regex: "run out of goods"
+        $regex: "hết hàng"
       }
     });
     if (existed) return; // Đã có cảnh báo chưa đọc, không tạo thêm
@@ -235,9 +235,9 @@ const createLowQuantityNotification = async (loadcell, io) => {
 
     let message = "";
     if (loadcell.quantity === 0) {
-      message = `[${floor}:${column}] of ${shelfName}: ran out of goods`;
+      message = `[${floor}:${column}] của ${shelfName}: hết hàng`;
     } else {
-      message = `[${floor}:${column}] of ${shelfName}: about to run out of goods`;
+      message = `[${floor}:${column}] của ${shelfName}: sắp hết hàng`;
     }
 
     const notification = await Notification.create({

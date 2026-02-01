@@ -4,7 +4,7 @@ const cors = require('cors');
 const app = express();
 require('dotenv').config();
 const connectDB = require('./src/config/database')
-const { connectMQTT } = require('./src/config/mqtt');
+const { connectMQTT, setIoInstance } = require('./src/config/mqtt');
 // Thêm các dòng sau:
 const http = require('http');
 const server = http.createServer(app);
@@ -70,6 +70,9 @@ app.use(express.static('public'));
 console.log(process.env.MONGO_URI);
 connectDB()
 
+// Set IO instance for MQTT
+setIoInstance(io);
+
 // Kết nối MQTT
 connectMQTT();
 
@@ -83,6 +86,7 @@ app.use(express.json({
 app.use(express.json({
   limit: '10mb'
 }));
+
 app.use(express.urlencoded({
   extended: true
 }));

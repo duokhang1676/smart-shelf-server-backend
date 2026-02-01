@@ -1,4 +1,7 @@
 const Product = require("../model/Product");
+const LoadCell = require("../model/LoadCell");
+const History = require("../model/History");
+const OderDetail = require("../model/OderDetail");
 const { pickUploadedFile, buildFileUrl } = require("../utils/upload.helper");
 
 // helper: generate short unique product_id
@@ -83,26 +86,42 @@ exports.createProduct = async (req, res) => {
 
 exports.getProducts = async (req, res) => {
   try {
-    const LoadCell = require("../model/LoadCell");
-    
     // Lấy tất cả sản phẩm
     const products = await Product.find().lean();
     
-    // Tính tổng số lượng từ LoadCells cho mỗi sản phẩm
+    // Tính tổng số lượng từ LoadCells, History và OderDetail cho mỗi sản phẩm
     const productsWithCalculatedStock = await Promise.all(
       products.map(async (product) => {
+        // Tính stock từ LoadCells
         const loadCellsAggregation = await LoadCell.aggregate([
           { $match: { product_id: product._id } },
           { $group: { _id: null, totalQuantity: { $sum: "$quantity" } } }
         ]);
-        
         const calculatedStock = loadCellsAggregation.length > 0 
           ? loadCellsAggregation[0].totalQuantity 
           : 0;
         
+        // Tính in_stock từ History (tổng post_verified_quantity cho sản phẩm)
+        const historyAggregation = await History.aggregate([
+          { $unwind: { path: "$post_products", includeArrayIndex: "productIndex" } },
+          { $match: { "post_products": product._id } },
+          { $addFields: { quantity: { $arrayElemAt: ["$post_verified_quantity", "$productIndex"] } } },
+          { $group: { _id: null, totalInStock: { $sum: "$quantity" } } }
+        ]);
+        const inStock = historyAggregation.length > 0 ? historyAggregation[0].totalInStock : 0;
+        
+        // Tính out_stock từ OderDetail (tổng quantity)
+        const orderDetailAggregation = await OderDetail.aggregate([
+          { $match: { product_id: product._id } },
+          { $group: { _id: null, totalOutStock: { $sum: "$quantity" } } }
+        ]);
+        const outStock = orderDetailAggregation.length > 0 ? orderDetailAggregation[0].totalOutStock : 0;
+        
         return {
           ...product,
-          stock: calculatedStock // Ghi đè stock bằng số lượng tính từ LoadCells
+          stock: calculatedStock, // Stock hiện tại từ LoadCells
+          in_stock: inStock, // Tổng nhập từ History
+          out_stock: outStock, // Tổng xuất từ OderDetail
         };
       })
     );
