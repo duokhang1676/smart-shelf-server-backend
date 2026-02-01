@@ -444,7 +444,7 @@ ISC License - xem file [LICENSE](LICENSE) để biết thêm chi tiết.
 
 ## 👥 Team
 
-**IoT Challenge Team**
+**CS17IUH Team**
 
 ---
 
@@ -480,4 +480,4 @@ Nếu có vấn đề hoặc câu hỏi:
 
 ---
 
-**Made with ❤️ by IoT Challenge Team**
+**Made with ❤️ by CS17IUH Team**

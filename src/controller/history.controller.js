@@ -36,26 +36,30 @@ exports.createHistory = async (req, res) => {
       const histDoc = new History(payload);
       createdHistory = await histDoc.save({ session });
 
-      // If there are post_products and corresponding quantities, decrement product stock
+      // Cập nhật stock: stock = post - pre (thêm vào kho)
       const postProducts = payload.post_products || [];
+      const preProducts = payload.pre_products || [];
       const postQtys = payload.post_verified_quantity || [];
+      const preQtys = payload.pre_verified_quantity || [];
 
       for (let i = 0; i < postProducts.length; i++) {
         const prod = postProducts[i];
         const prodId = (typeof prod === "object" && prod !== null) ? (prod._id ?? prod.product_id ?? prod.id) : prod;
-        const qtyRaw = Array.isArray(postQtys) ? postQtys[i] : postQtys;
-        const qty = Math.max(0, Number(qtyRaw || 0));
+        
+        const postQty = Math.max(0, Number(postQtys[i] || 0));
+        const preQty = Math.max(0, Number(preQtys[i] || 0));
+        const stockChange = postQty - preQty; // Số lượng thay đổi
 
-        if (!prodId || qty === 0) continue;
+        if (!prodId || stockChange === 0) continue;
 
-        // decrement stock atomically and ensure non-negative
+        // Cập nhật stock
         const updated = await Product.findByIdAndUpdate(
           prodId,
-          { $inc: { stock: -qty } },
+          { $inc: { stock: stockChange } },
           { new: true, session }
         );
 
-        // If stock became negative (schema doesn't prevent), clamp to 0
+        // Đảm bảo stock không âm
         if (updated && typeof updated.stock === "number" && updated.stock < 0) {
           await Product.findByIdAndUpdate(prodId, { $set: { stock: 0 } }, { session });
         }

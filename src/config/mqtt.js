@@ -124,8 +124,8 @@ async function handleLoadCellQuantity(payload) {
           if (quantities[index] !== undefined) {
             cell.quantity = quantities[index];
             await cell.save();
-            // Check for notifications
-            if (cell.quantity <= cell.threshold) {
+            // Check for notifications (bỏ qua nếu quantity = 255)
+            if (cell.quantity <= cell.threshold && cell.quantity !== 255) {
               console.log('gửi');
               
               await createLowQuantityNotification(cell, ioInstance);

@@ -203,6 +203,11 @@ const getUnreadCount = async (req, res) => {
  * @param {Object} [io] - (Optional) Socket.IO instance để emit realtime
  */
 const createLowQuantityNotification = async (loadcell, io) => {
+  // Bỏ qua nếu quantity = 255 (lỗi cảm biến)
+  if (loadcell.quantity === 255) {
+    return;
+  }
+
   if (loadcell.quantity <= loadcell.threshold) {
     // Kiểm tra đã có notification cảnh báo cho loadcell này chưa (tránh spam)
     const existed = await Notification.findOne({

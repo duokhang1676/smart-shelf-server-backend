@@ -2,6 +2,7 @@
 const Oder = require('../model/Oder');
 const OderDetail = require('../model/OderDetail');
 const Notification = require('../model/Notification');
+const Product = require('../model/Product');
 const fs = require("fs");
 const path = require("path");
 const { cloudinary } = require('../config/cloudinary');
@@ -106,6 +107,22 @@ exports.createOrderWithDetails = async (req, res) => {
                     saved = await new OderDetail(payload).save();
                 }
                 details.push(saved);
+
+                // Trừ stock khi tạo order
+                const productId = d.product_id;
+                const quantity = Number(d.quantity) || 0;
+                if (productId && quantity > 0) {
+                    const updated = await Product.findByIdAndUpdate(
+                        productId,
+                        { $inc: { stock: -quantity } },
+                        { new: true, session }
+                    );
+                    
+                    // Đảm bảo stock không âm
+                    if (updated && typeof updated.stock === "number" && updated.stock < 0) {
+                        await Product.findByIdAndUpdate(productId, { $set: { stock: 0 } }, { session });
+                    }
+                }
             } catch (e) {
                 console.error("Failed to create order detail for payload:", d, e);
             }
