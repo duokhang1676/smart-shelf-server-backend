@@ -38,6 +38,11 @@ const ProductSchema = new mongoose.Schema({
     required: true,
     default: 1
   },
+  threshold: {
+    type: Number,
+    required: true,
+    default: 1
+  },
 }, {
   timestamps: true
 });

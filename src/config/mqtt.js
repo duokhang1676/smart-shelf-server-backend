@@ -119,13 +119,15 @@ async function handleLoadCellQuantity(payload) {
       // Tìm shelf dựa trên mac_ip
       const shelf = await Shelf.findOne({ mac_ip: macIp });
       if (shelf) {
-        const loadCells = await LoadCell.find({ shelf_id: shelf._id }).sort({ floor: 1, column: 1 });
+        const loadCells = await LoadCell.find({ shelf_id: shelf._id }).populate('product_id').sort({ floor: 1, column: 1 });
         loadCells.forEach(async (cell, index) => {
           if (quantities[index] !== undefined) {
             cell.quantity = quantities[index];
             await cell.save();
             // Check for notifications (bỏ qua nếu quantity = 255)
-            if (cell.quantity <= cell.threshold && cell.quantity !== 255) {
+            // Lấy threshold từ Product thay vì LoadCell
+            const threshold = cell.product_id?.threshold || 1;
+            if (cell.quantity <= threshold && cell.quantity !== 255) {
               console.log('gửi');
               
               await createLowQuantityNotification(cell, ioInstance);
@@ -140,17 +142,8 @@ async function handleLoadCellQuantity(payload) {
 }
 
 async function handleSensorEnvironment(payload) {
-  const { temperature, humidity, shelf_id } = payload;
-  if (temperature > 30 || humidity > 80) {
-    const notification = new Notification({
-      message: `Kệ ${shelf_id}: Cảnh báo môi trường - Nhiệt độ: ${temperature}°C, Độ ẩm: ${humidity}%`,
-      type: 'warning',
-      category: 'general',
-      shelf_id,
-    });
-    await notification.save();
-    if (ioInstance) ioInstance.emit('new-notification', notification);
-  }
+  // Không tạo cảnh báo môi trường
+  return;
 }
 
 async function handleShelfStatus(payload) {
