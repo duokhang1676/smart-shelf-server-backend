@@ -1,6 +1,7 @@
 const bcrypt = require('bcrypt');
 const jwt = require('jsonwebtoken');
-const User = require('../model/User'); // chỉnh đúng đường dẫn model của bạn
+const User = require('../model/User');
+const { cloudinary } = require('../config/cloudinary');
 
 // Đăng ký tài khoản
 exports.register = async (req, res) => {
@@ -93,6 +94,43 @@ exports.updateUser = async (req, res) => {
 
     if (password) {
       updatedData.password = await bcrypt.hash(password, 10);
+    }
+
+    // Upload avatar nếu có file
+    let file = req.file;
+    if (!file && req.files) {
+      file = req.files.avatar && req.files.avatar[0];
+    }
+
+    if (file) {
+      let uploadResult;
+      
+      if (file.buffer) {
+        uploadResult = await new Promise((resolve, reject) => {
+          const uploadStream = cloudinary.uploader.upload_stream(
+            {
+              folder: 'smart-shelf/users',
+              public_id: `user-${req.params.id}-${Date.now()}`,
+              resource_type: 'auto'
+            },
+            (error, result) => {
+              if (error) reject(error);
+              else resolve(result);
+            }
+          );
+          uploadStream.end(file.buffer);
+        });
+      } else if (file.path) {
+        uploadResult = await cloudinary.uploader.upload(file.path, {
+          folder: 'smart-shelf/users',
+          public_id: `user-${req.params.id}-${Date.now()}`,
+          resource_type: 'auto'
+        });
+      }
+
+      if (uploadResult && uploadResult.secure_url) {
+        updatedData.avatar = uploadResult.secure_url;
+      }
     }
 
     const updatedUser = await User.findByIdAndUpdate(req.params.id, updatedData, { new: true }).select('-password');
