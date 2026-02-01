@@ -29,4 +29,11 @@ const upload = multer({
   { name: "img_url", maxCount: 1 },
 ]);
 
-module.exports = upload;
+// Conditional multer middleware for avatar upload
+const conditionalMulter = multer({
+  storage,
+  limits: { fileSize: 10000000 }, // 10MB limit
+  fileFilter: (req, file, cb) => checkFileType(file, cb),
+}).single('avatar');
+
+module.exports = { upload, conditionalMulter };

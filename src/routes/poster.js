@@ -1,7 +1,7 @@
 const express = require("express");
 const router = express.Router();
 const ctrl = require("../controller/poster.controller");
-const upload = require("../middleware/upload"); // reuse existing middleware
+const { upload } = require("../middleware/upload"); // reuse existing middleware
 
 // list
 router.get("/", ctrl.getAllPosters);
