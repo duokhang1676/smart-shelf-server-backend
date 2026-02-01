@@ -6,7 +6,6 @@ const { conditionalMulter } = require('../middleware/upload');
 
 router.post('/register', userController.register);
 router.post('/login', userController.login);
-router.delete('/:id', verifyToken, isAdmin, userController.deleteUser);
 
 router.get('/', userController.getAllUsers);
 router.post('/', conditionalMulter, userController.createUser);
