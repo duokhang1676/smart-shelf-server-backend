@@ -120,20 +120,32 @@ async function handleLoadCellQuantity(payload) {
       const shelf = await Shelf.findOne({ mac_ip: macIp });
       if (shelf) {
         const loadCells = await LoadCell.find({ shelf_id: shelf._id }).populate('product_id').sort({ floor: 1, column: 1 });
-        loadCells.forEach(async (cell, index) => {
+        
+        // Use for...of instead of forEach to properly handle async/await
+        for (let index = 0; index < loadCells.length; index++) {
+          const cell = loadCells[index];
           if (quantities[index] !== undefined) {
-            cell.quantity = quantities[index];
+            const newQuantity = quantities[index];
+            const oldQuantity = cell.quantity;
+            
+            cell.quantity = newQuantity;
             await cell.save();
-            // Check for notifications (bỏ qua nếu quantity = 255)
-            // Lấy threshold từ Product thay vì LoadCell
-            const threshold = cell.product_id?.threshold || 1;
-            if (cell.quantity <= threshold && cell.quantity !== 255) {
-              console.log('gửi');
-              
+            
+            // Check for notifications (bỏ qua nếu quantity = 255 hoặc 200 - lỗi cảm biến)
+            if (newQuantity >= 200) {
+              continue; // Skip error values
+            }
+            
+            // Lấy threshold từ LoadCell (mỗi ngăn có ngưỡng riêng)
+            const threshold = cell.threshold || 1;
+            
+            // Only create notification if quantity drops to or below threshold
+            if (newQuantity <= threshold && oldQuantity > threshold) {
+              console.log(`📉 Low stock detected: ${cell.product_id?.product_name || 'Unknown'} [${cell.floor}:${cell.column}] - Qty: ${newQuantity}`);
               await createLowQuantityNotification(cell, ioInstance);
             }
           }
-        });
+        }
       } else {
         console.log(`Shelf with mac_ip ${macIp} not found`);
       }
@@ -147,24 +159,37 @@ async function handleSensorEnvironment(payload) {
 }
 
 async function handleShelfStatus(payload) {
-  const { status, shelf_id, message, shelf_status_lean, shelf_status_shake, date_time, id } = payload;
+  const { status, message, shelf_status_lean, shelf_status_shake, date_time, id: shelf_mac } = payload;
+  
+  // Find shelf by MAC address
+  let shelf_id = null;
+  let shelfName = shelf_mac;
+  if (shelf_mac) {
+    const shelf = await Shelf.findOne({ mac_ip: shelf_mac });
+    if (shelf) {
+      shelf_id = shelf._id;
+      shelfName = shelf.shelf_name || shelf.shelf_id;
+    } else {
+      console.warn(`⚠️ Shelf not found for MAC: ${shelf_mac}`);
+    }
+  }
   
   let notificationMessage = message;
   let notificationType = status === 'error' ? 'error' : 'info';
   let category = 'general';
   
   if (shelf_status_lean === true) {
-    notificationMessage = `Kệ bị nghiêng vào lúc ${date_time}`;
+    notificationMessage = `⚠️ Kệ ${shelfName} bị nghiêng vào lúc ${date_time}`;
     notificationType = 'warning';
     category = 'vibration';
   } else if (shelf_status_shake === true) {
-    notificationMessage = `Kệ bị rung lắc vào lúc ${date_time}`;
+    notificationMessage = `⚠️ Kệ ${shelfName} bị rung lắc vào lúc ${date_time}`;
     notificationType = 'warning';
     category = 'vibration';
   } else if (status) {
-    notificationMessage = message || `Trạng thái kệ ${shelf_id}: ${status}`;
+    notificationMessage = message || `Trạng thái kệ ${shelfName}: ${status}`;
   } else {
-    // Nếu không có gì đặc biệt, có thể không tạo notification
+    // Nếu không có gì đặc biệt, không tạo notification
     return;
   }
   
@@ -176,18 +201,51 @@ async function handleShelfStatus(payload) {
   });
   await notification.save();
   if (ioInstance) ioInstance.emit('new-notification', notification);
+  console.log(`✅ Shelf status notification created: ${category}`);
 }
 
 async function handleUnpaidCustomer(payload) {
-  const { customer_id, shelf_id, amount } = payload;
+  console.log('🔍 handleUnpaidCustomer payload:', JSON.stringify(payload, null, 2));
+  
+  const { id: shelf_mac, taken_quantity, date_time } = payload;
+  
+  // Find shelf by MAC address
+  const shelf = await Shelf.findOne({ mac_ip: shelf_mac });
+  if (!shelf) {
+    console.warn(`⚠️ Shelf not found for MAC: ${shelf_mac}`);
+    return;
+  }
+  
+  // Calculate total quantity taken
+  const totalTaken = Array.isArray(taken_quantity) 
+    ? taken_quantity.reduce((sum, qty) => sum + (qty > 0 && qty < 200 ? qty : 0), 0)
+    : 0;
+  
+  // Get product details to calculate approximate amount (optional, for better notification)
+  let estimatedAmount = 0;
+  try {
+    const loadCells = await LoadCell.find({ shelf_id: shelf._id })
+      .populate('product_id')
+      .sort({ floor: 1, column: 1 });
+    
+    taken_quantity.forEach((qty, index) => {
+      if (qty > 0 && qty < 200 && loadCells[index] && loadCells[index].product_id) {
+        estimatedAmount += loadCells[index].product_id.price * qty;
+      }
+    });
+  } catch (err) {
+    console.warn('Could not calculate estimated amount:', err.message);
+  }
+  
   const notification = new Notification({
-    message: `Khách hàng ${customer_id} chưa thanh toán tại kệ ${shelf_id}, số tiền: ${amount}`,
+    message: `⚠️ Phát hiện khách hàng lấy ${totalTaken} sản phẩm chưa thanh toán tại kệ ${shelf.shelf_name}${estimatedAmount > 0 ? `, ước tính: ${estimatedAmount.toLocaleString('vi-VN')}đ` : ''} - ${date_time}`,
     type: 'warning',
     category: 'order',
-    shelf_id,
+    shelf_id: shelf._id,
   });
   await notification.save();
   if (ioInstance) ioInstance.emit('new-notification', notification);
+  console.log(`✅ Unpaid customer notification created - ${totalTaken} items taken`);
 }
 
 async function handlePaymentNotification(payload) {
@@ -205,7 +263,7 @@ async function handleProductAdded(payload) {
   const { id: shelf_mac, event, rfid, verified_quantity, date_time } = payload;
   
   // Find shelf by MAC address to get ObjectId
-  const shelf = await Shelf.findOne({ id: shelf_mac });
+  const shelf = await Shelf.findOne({ mac_ip: shelf_mac });
   if (!shelf) {
     console.warn(`⚠️ Shelf not found for MAC: ${shelf_mac}`);
     return;
@@ -216,13 +274,14 @@ async function handleProductAdded(payload) {
   const employeeName = user ? (user.fullName || user.username) : `RFID ${rfid}`;
   
   const notification = new Notification({
-    message: `Nhân viên ${employeeName} đã thêm sản phẩm vào kệ ${shelf.name || shelf_mac}, số lượng: ${verified_quantity} vào lúc ${date_time}`,
+    message: `Nhân viên ${employeeName} đã thêm sản phẩm vào kệ ${shelf.shelf_name || shelf_mac}, số lượng: ${verified_quantity} vào lúc ${date_time}`,
     type: 'info',
     category: 'restock',
     shelf_id: shelf._id, // Use ObjectId instead of MAC address
   });
   await notification.save();
   if (ioInstance) ioInstance.emit('new-notification', notification);
+  console.log(`✅ Product added notification created for shelf ${shelf.shelf_name}`);
 }
 
 function getMQTTClient() {

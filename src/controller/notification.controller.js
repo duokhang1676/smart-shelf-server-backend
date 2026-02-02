@@ -208,12 +208,8 @@ const createLowQuantityNotification = async (loadcell, io) => {
     return;
   }
 
-  // Lấy threshold từ Product
-  let product = null;
-  if (loadcell.product_id) {
-    product = await Product.findById(loadcell.product_id);
-  }
-  const threshold = product?.threshold || 1;
+  // Lấy threshold từ LoadCell (mỗi ngăn có ngưỡng riêng)
+  const threshold = loadcell.threshold || 1;
 
   if (loadcell.quantity <= threshold) {
     // Kiểm tra đã có notification cảnh báo cho loadcell này chưa (tránh spam)
